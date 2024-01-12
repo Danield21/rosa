@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import copy
 
+
 def forward_layerwise(layers, x, device='cpu', verbose=False):
     """ Forward pass through a list of layers.
 

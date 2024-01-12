@@ -3,6 +3,7 @@ import logging
 
 import torch
 import torch.nn as nn
+import numpy as np
 
 
 class PeftLinear(nn.Module):
@@ -16,7 +17,7 @@ class PeftLinear(nn.Module):
             alpha: float = 32.0,
             adapt_method: str = 'ab',  # 'ab', 'a', 'b'
             sample_method: str = 'random',
-            factorize_method: str = 'equal',  # 'equal', 'add', 'random'
+            factorize_method: str = 'svd_equal',  # 'svd_equal', 'svd_add', 'random_proj', 'random_proj_orthogonal'
             init_method: str = 'zero',  # 'zero', 'random'
             bias_requires_grad: bool = True,
             debug: bool = False,
@@ -51,8 +52,8 @@ class PeftLinear(nn.Module):
         assert isinstance(bias, bool), "bias must be a boolean"
         assert isinstance(use_scale, bool), "use_scale must be a boolean"
         assert isinstance(alpha, (int, float)), "alpha must be an integer or a float"
-        assert factorize_method in ['equal', 'add', 'random'], \
-            "factorize_method must be one of ['equal', 'add', 'random']"
+        assert factorize_method in ['svd_equal', 'svd_add', 'random_add', 'random_proj', 'random_proj_orthogonal'], \
+            "factorize_method must be one of ['svd_equal', 'svd_add', 'random', 'random_orthogonal']"
         assert sample_method in ['random', 'top', 'bottom'], \
             "sample_method must be one of ['random', 'top', 'bottom']"
         assert init_method in ['zero', 'random'], "init_method must be one of ['zero', 'random']"
@@ -156,10 +157,29 @@ class PeftLinear(nn.Module):
                 # If rank is larger than the rank upper bound, train the whole layer
                 return self
 
-            if self.factorize_method == 'random':
+            if self.factorize_method == 'random_add':
                 init_a_trainable = torch.zeros(self.in_features, self.rank, device=self.w.device)
                 init_b_trainable = torch.randn(self.rank, self.out_features, device=self.w.device)
                 init_w = self.w.data
+
+            elif self.factorize_method == 'random_proj':
+                # Generate random ortho matrix and take first r columns
+                random_matrix = torch.randn(self.w.shape[1], self.w.shape[1], device=self.w.device)
+                q = random_matrix[:, :self.rank]
+
+                init_a_trainable = q
+                init_b_trainable = q.T @ self.w  # [r, d] [d, p] => [r, p]
+                init_w = self.w - q @ (q.T @ self.w)
+
+            elif self.factorize_method == 'random_proj_orthogonal':
+                # Generate random ortho matrix and take first r columns
+                random_matrix = torch.randn(self.w.shape[1], self.w.shape[1], device=self.w.device)
+                q, _ = torch.linalg.qr(random_matrix)
+                q = q[:, :self.rank]
+
+                init_a_trainable = q
+                init_b_trainable = q.T @ self.w  # [r, d] [d, p] => [r, p]
+                init_w = self.w - q @ (q.T @ self.w)
 
             else:
                 # Factorize
@@ -179,13 +199,13 @@ class PeftLinear(nn.Module):
                 init_a_fixed = a[:, fixed_indices]
                 init_b_fixed = b[fixed_indices, :]
 
-                if self.factorize_method == 'equal':  # (regular) init + ortho
+                if self.factorize_method == 'svd_equal':  # (regular) init + ortho
                     init_w = init_a_fixed @ init_b_fixed
-                elif self.factorize_method == 'add':  # init
+                elif self.factorize_method == 'svd_add':  # init
                     init_w = self.w.data
                 else:
                     raise AttributeError(
-                        f"Unknown factorize method: {self.factorize_method}. Method must be one of ['equal', 'add']"
+                        f"Unknown factorize method: {self.factorize_method}. Method must be one of ['svd_equal', 'svd_add']"
                     )
 
             # Initialize
@@ -206,6 +226,29 @@ class PeftLinear(nn.Module):
             # Toggle merged flag
             self.merged = torch.tensor([False])
             return self
+
+    @staticmethod
+    def _generate_random_orthogonal_matrix(n, r):
+        """Generate a random orthogonal matrix Q of size nxr, where r < n and Q^TQ = I.
+
+        Args:
+            n (int): Number of rows of the matrix.
+            r (int): Number of columns of the matrix, where r < n.
+
+        Returns:
+            numpy.ndarray: An nxr orthogonal matrix Q.
+        """
+        if r >= n:
+            raise ValueError("r must be less than n.")
+
+        # Generate a random nxn matrix
+        random_matrix = np.random.randn(n, n)
+
+        # Perform QR decomposition on the random matrix
+        Q, _ = np.linalg.qr(random_matrix)
+
+        # Return the first r columns of Q
+        return Q[:, :r]
 
     def __repr__(self):
         cls = self.__class__.__name__

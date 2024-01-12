@@ -9,7 +9,7 @@
 module load python/3.8
 
 # 2. Load your environment
-source /home/mila/m/marawan.gamal/.venv/rosa/bin/activate
+source /home/mila/m/marawan.gamal/scratch/.venv/rosa/bin/activate
 
 # 3. Copy your dataset on the compute node
 #cp -r /home/mila/m/marawan.gamal/.cache/huggingface $SLURM_TMPDIR/huggingface
@@ -24,13 +24,17 @@ source /home/mila/m/marawan.gamal/.venv/rosa/bin/activate
 #python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 fnmodel.name=rosa +task=cola fnmodel.params.rank=4 train.epochs=4 train.lr=2e-3
 #python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 fnmodel.name=lora +task=cola fnmodel.params.rank=4 train.epochs=4 train.lr=2e-4
 
-python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 +task=cola train.epochs=5 train.lr=2e-5 train.optimizer.name=sgd
-python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 fnmodel.name=rosa fnmodel.params.factorize_mode=bottom +task=cola fnmodel.params.rank=2 train.epochs=5 train.lr=2e-3 fnmodel.params.bias_requires_grad=False train.optimizer.name=sgd fnmodel.factorize_freq=1
-python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 fnmodel.name=lora +task=cola fnmodel.params.rank=2 train.epochs=5 train.lr=2e-3 fnmodel.params.bias_requires_grad=False train.optimizer.name=sgd
+#python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 +task=cola train.epochs=5 train.lr=2e-5 train.optimizer.name=sgd
+#python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 fnmodel.name=rosa fnmodel.params.factorize_mode=bottom +task=cola fnmodel.params.rank=2 train.epochs=5 train.lr=2e-3 fnmodel.params.bias_requires_grad=False train.optimizer.name=sgd fnmodel.factorize_freq=1
+#python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 fnmodel.name=lora +task=cola fnmodel.params.rank=2 train.epochs=5 train.lr=2e-3 fnmodel.params.bias_requires_grad=False train.optimizer.name=sgd
 
 
-
-
+python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj train.lr=2e-3
+python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj train.lr=2e-4
+python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj train.lr=2e-5
+python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj_orthogonal train.lr=2e-3
+python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj_orthogonal train.lr=2e-4
+python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj_orthogonal train.lr=2e-5
 
 
 # Wandb sweep commands

@@ -1,5 +1,5 @@
-figures-old/
-figures/
+local/figures-old/
+local/figures/
 figures_/
 .idea
 .DS_Store
@@ -10,3 +10,4 @@ peftnet/__pycache__
 venv
 *.png
 *.pdf
+local
