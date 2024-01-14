@@ -59,7 +59,7 @@ class SlurmJobManager:
     cache_dir = "~/.jobrunner"
     cache_file_status = "jobrunner_status_table.csv"
 
-    def __init__(self, file, overwrite=False):
+    def __init__(self, file=None, overwrite=False):
         self.cache_dir = self.__class__.cache_dir
         self.cache_file_status = self.__class__.cache_file_status
         self.file = file
@@ -172,6 +172,12 @@ class SlurmJobManager:
     @classmethod
     def status(cls):
         outpath = osp.join(osp.expanduser(cls.cache_dir), cls.cache_file_status)
+
+        # Check if file exists
+        if not osp.exists(outpath):
+            print("No experiments running")
+            return
+
         status_table = pd.read_csv(outpath)
 
         # Ensure `job_id` is an integer
@@ -206,6 +212,15 @@ class SlurmJobManager:
         totals_tbl = pd.DataFrame([totals])
         print(totals_tbl.to_string(index=False))
 
+    @classmethod
+    def clear_cache(cls):
+        cache_path = osp.join(osp.expanduser(cls.cache_dir), cls.cache_file_status)
+        if osp.exists(cache_path):
+            os.remove(cache_path)
+            print(f"Cache cleared: {cache_path}")
+        else:
+            print("No cache to clear.")
+
 
 
 if __name__ == '__main__':
@@ -213,9 +228,12 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--filepath', type=str, )
     parser.add_argument('-o', '--overwrite', action='store_true', default=False)
     parser.add_argument('-s', '--status', action='store_true', default=False)
+    parser.add_argument('-c', '--clear', action='store_true', default=False)
     args = parser.parse_args()
 
     if args.status:
         SlurmJobManager.status()
+    elif args.clear:
+        SlurmJobManager.clear_cache()
     else:
         SlurmJobManager(args.filepath, args.overwrite).submit_jobs()

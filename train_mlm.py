@@ -497,7 +497,7 @@ def main(cfg: DictConfig):
             set_seeds(int(args['seed'] + t))
 
         exp_name = get_experiment_name(
-            {"train": args["train"], "model": args["model"], "fnmodel": args["fnmodel"], "trial": t}
+            {"train": args["train"], "model": args["model"], "fnmodel": args["fnmodel"], "trial": t, "seed": args['seed']}
         )
         folder_name = "_".join(["{}{}".format(k, v) for k, v in exp_name.items()])
 
