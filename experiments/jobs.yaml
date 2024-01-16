@@ -25,6 +25,14 @@ groups:
 # E2E_NLG BENCHMARK EXPERIMENTS
 # =============================
 
+
+  - name: MET | E2E_NLG | GPT2-M (peft-method, rank, lr)
+    preamble:
+      - "#SBATCH --gres=gpu:2"
+      - "#SBATCH --time=8:00:00"
+    paralleljobs:
+      - python train_clm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan model.name=meta-llama/Llama-2-7b-chat-hf fnmodel.name=none train.lr=5e-5
+
 #  - name: MET | E2E_NLG | GPT2-M (peft-method, rank, lr)
 #    preamble:
 #      - "#SBATCH --gres=gpu:2"
@@ -91,29 +99,6 @@ groups:
 #      - python train_clm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan model.name=gpt2-medium fnmodel.name=rosa fnmodel.params.rank=4 fnmodel.params.factorize_mode=bottom train.lr=2e-3
 #      - python train_clm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan model.name=gpt2-medium fnmodel.name=rosa fnmodel.params.rank=4 fnmodel.params.factorize_mode=bottom train.lr=2e-2
 
-
-#  - name: GLUE | COLA | Roberta-Base (peft-method, lr, adapt_method)
-#    preamble:
-#      - "#SBATCH --gres=gpu:2"
-#      - "#SBATCH --time=8:00:00"
-#    paralleljobs:
-#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan runs=3 seed=42 fnmodel.name=lora +task=cola fnmodel.params.rank=2 fnmodel.params.adapt_method=a train.lr=2e-4
-#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan runs=3 seed=42 fnmodel.name=rosa +task=cola fnmodel.params.rank=2 fnmodel.params.adapt_method=a train.lr=2e-3
-
-
-        #  - name: GLUE | COLA | Roberta-Base (peft-method, rank, lr)
-#    preamble:
-#      - "#SBATCH --gres=gpu:2"
-#      - "#SBATCH --time=8:00:00"
-#    paralleljobs:
-#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 fnmodel.name=none +task=cola train.lr=2e-5
-#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 fnmodel.name=ia3 +task=cola train.lr=2e-3
-#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 fnmodel.name=lora +task=cola fnmodel.params.rank=2 train.epochs=10 train.lr=2e-4
-#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 fnmodel.name=rosa +task=cola fnmodel.params.rank=2 train.epochs=10 train.lr=2e-3
-#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 fnmodel.name=lora +task=cola fnmodel.params.rank=4 train.epochs=10 train.lr=2e-4
-#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 fnmodel.name=rosa +task=cola fnmodel.params.rank=4 train.epochs=10 train.lr=2e-3
-#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 fnmodel.name=lora +task=cola fnmodel.params.rank=8 train.epochs=10 train.lr=2e-4
-#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 fnmodel.name=rosa +task=cola fnmodel.params.rank=8 train.epochs=10 train.lr=2e-3
 
 # ==========================
 # GLUE BENCHMARK EXPERIMENTS
@@ -578,18 +563,19 @@ groups:
 #      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=qqp train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=8 fnmodel.factorize_freq=2 train.lr=2e-5
 
 
-  - name: GLUE | COLA | Roberta-Base (factorize_method, lr)
-    preamble:
-      - "#SBATCH --gres=gpu:2"
-      - "#SBATCH --time=8:00:00"
-    paralleljobs:
-      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj train.lr=2e-3
-      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj train.lr=2e-4
-      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj train.lr=2e-5
-      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj_orthogonal train.lr=2e-3
-      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj_orthogonal train.lr=2e-4
-      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj_orthogonal train.lr=2e-5
-      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=84 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj train.lr=2e-5
-      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=84 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj_orthogonal train.lr=2e-3
-      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=168 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj train.lr=2e-5
-      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=168 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj_orthogonal train.lr=2e-3
+# Exploring orthogonality
+#  - name: GLUE | COLA | Roberta-Base (factorize_method, lr)
+#    preamble:
+#      - "#SBATCH --gres=gpu:2"
+#      - "#SBATCH --time=8:00:00"
+#    paralleljobs:
+#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj train.lr=2e-3
+#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj train.lr=2e-4
+#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj train.lr=2e-5
+#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj_orthogonal train.lr=2e-3
+#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj_orthogonal train.lr=2e-4
+#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj_orthogonal train.lr=2e-5
+#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=84 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj train.lr=2e-5
+#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=84 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj_orthogonal train.lr=2e-3
+#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=168 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj train.lr=2e-5
+#      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=168 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=2 fnmodel.params.factorize_method=random_proj_orthogonal train.lr=2e-3

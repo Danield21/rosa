@@ -354,7 +354,6 @@ def train(
             cmodel, optimizer, lr_scheduler = factorize(
                 args, cmodel, lr_scheduler, optimizer, steps_counter, num_training_steps
             )
-
             cuda_memory_tracker.track("[train] After epoch level sample trainable")
 
         end.record()

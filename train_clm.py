@@ -20,7 +20,7 @@ from transformers import AutoModelForCausalLM
 
 from utils.utils import get_num_params, get_experiment_name, get_latency, AverageMeter, save_object, LatencyReport, \
     CudaMemoryTracker, preprocess_function, get_ignore_list_e2e, set_seeds
-from eval import evaluate_model
+from utils.eval import evaluate_model
 
 import peftnet as pn
 import pandas as pd
@@ -155,34 +155,50 @@ def evaluate(model, device, eval_dataloader):
             "bpc": loss_average_meter.value / math.log(2)
             }
 
-
-def refactorize(args, model, lr_scheduler, optimizer, steps_counter, num_training_steps):
-    """Refactorize model and update optimizer and scheduler accordingly"""
-
-    # (Re)factorize model
-    model = model.module.factorize() if isinstance(model, nn.DataParallel) else model.factorize()
-
-    # New optimizer
-    opt_cls = optimizer.__class__
-    del optimizer
-    optimizer = opt_cls(
-        model.parameters(),
-        lr=args["train"]["lr"]
-    )
-
-    # New scheduler
-    if lr_scheduler is not None:
-        del lr_scheduler
-        lr_scheduler = get_scheduler(
-            name=args['train']['scheduler']['name'],
-            optimizer=optimizer,
-            num_training_steps=num_training_steps,
-            **args['train']['scheduler']['params']
+def factorize(args, model, lr_scheduler, optimizer, steps_counter, num_training_steps):
+    # Mask gradients
+    with torch.no_grad():
+        logging.info("\n=> *** Factorizing model at step {} with factorize level {} ***\n".format(
+                steps_counter, args['fnmodel']['factorize_level']
+            )
         )
-        for i in range(steps_counter):
-            lr_scheduler.step()
+        model = model.module.factorize() if isinstance(model, nn.DataParallel) else model.factorize()
 
-    return model, optimizer, lr_scheduler
+        # New optimizer
+        opt_cls = optimizer.__class__
+        del optimizer
+
+        if "adam" in args['train']['optimizer']['name']:
+            optimizer = opt_cls(
+                model.parameters(),
+                lr=args["train"]["lr"],
+                **args['train']['optimizer']['params']
+            )
+        # Catch all exceptions
+        else:
+            optimizer = opt_cls(
+                model.parameters(),
+                lr=args["train"]["lr"]
+            )
+
+        # New scheduler
+        if lr_scheduler is not None:
+            del lr_scheduler
+
+            # Scheduler
+            n_warmup_steps = math.ceil(num_training_steps * args['train']['scheduler']['warmup_ratio'])
+            lr_scheduler = get_scheduler(
+                name=args['train']['scheduler']['name'],
+                optimizer=optimizer,
+                num_training_steps=num_training_steps,
+                num_warmup_steps=n_warmup_steps,
+                **args['train']['scheduler']['params']
+            ) if args['train']['scheduler']['name'] != "none" else None
+
+            for i in range(steps_counter):
+                lr_scheduler.step()
+
+        return model, optimizer, lr_scheduler
 
 
 def get_num_trainable_params(model):
@@ -191,10 +207,23 @@ def get_num_trainable_params(model):
         n_trainable_params += param.numel() if param.requires_grad else 0
     return n_trainable_params
 
-
-def train_epoch(args, model, device, train_dataloader, optimizer, lr_scheduler, epoch, print_freq=10,
-                report_latency=True, steps_counter=0, writer=None,
-                valid_dataloader=None, test_dataloader=None, tokenizer=None, test_dataset=None):
+def train_epoch(
+        args,
+        model,
+        device,
+        train_dataloader,
+        optimizer,
+        lr_scheduler,
+        epoch,
+        print_freq=10,
+        report_latency=True,
+        steps_counter=0,
+        writer=None,
+        valid_dataloader=None,
+        test_dataloader=None,
+        tokenizer=None,
+        test_dataset=None
+):
     loss_average_meter = AverageMeter()
     ppl_average_meter = AverageMeter()
 
@@ -263,7 +292,7 @@ def train_epoch(args, model, device, train_dataloader, optimizer, lr_scheduler, 
         if args['fnmodel']['name'] == 'rosa' and args['fnmodel']['params']['level'] == "batch":
             num_training_steps = args['train']['epochs'] * len(train_dataloader)
 
-            model, optimizer, lr_scheduler = refactorize(
+            model, optimizer, lr_scheduler = factorize(
                 args, model, lr_scheduler, optimizer, steps_counter, num_training_steps
             )
             cuda_memory_tracker.track("[train_epoch] After sample_trainable")
@@ -335,21 +364,27 @@ def train_epoch(args, model, device, train_dataloader, optimizer, lr_scheduler, 
             "bpc": loss_average_meter.value / math.log(2)}, optimizer
 
 
-def train(args, cmodel, optimizer, lr_scheduler, train_dataloader, valid_dataloader, device, output_path,
-          tokenizer, writer, curr_epoch=0, best_valid_metrics=None, baseline_runtime_metrics=None,
-          cuda_memory_tracker=None, test_dataloader=None, test_dataset=None):
+def train(
+        args,
+        cmodel,
+        optimizer,
+        lr_scheduler,
+        train_dataloader,
+        valid_dataloader,
+        device,
+        output_path,
+        tokenizer,
+        writer,
+        curr_epoch=0,
+        best_valid_metrics=None,
+        baseline_runtime_metrics=None,
+        cuda_memory_tracker=None,
+        test_dataloader=None,
+        test_dataset=None
+):
 
     # Get runtime metrics
     cuda_memory_tracker = CudaMemoryTracker() if cuda_memory_tracker is None else cuda_memory_tracker
-    factorized_mean_mean, factorized_mean_std = get_latency(
-        cmodel, device=device, inp=torch.ones(args['logging']['input_size'], dtype=torch.long)
-    )
-    factorized_mean_params = get_num_params(cmodel)
-
-    factorized_runtime_metrics = {
-        "mean": factorized_mean_mean, "std": factorized_mean_std, "params": factorized_mean_params
-    }
-    cuda_memory_tracker.track("[train] After computing latency of factorized model")
 
     # Train loop
     steps_counter = 0
@@ -360,15 +395,16 @@ def train(args, cmodel, optimizer, lr_scheduler, train_dataloader, valid_dataloa
 
         epoch_start_time = time.time()
 
-        # Refactorize if using ROSA model
-        if (args['fnmodel']['name'] == "rosa" and args['fnmodel']['params']['level'] == "epoch"
-                and i_epoch > 0 and args['fnmodel']['factorize_freq'] % i_epoch == 0):
-            logging.info("=> Re-sampling trainable parameters...")
+        factorize_flag = False
+        if args['fnmodel']['name'] == "rosa":
+            if  i_epoch > 0 and i_epoch % args['fnmodel']['factorize_freq'] == 0:
+                factorize_flag = True
+
+        if factorize_flag:
             num_training_steps = args['train']['epochs'] * len(train_dataloader)
-            cmodel, optimizer, lr_scheduler = refactorize(
+            cmodel, optimizer, lr_scheduler = factorize(
                 args, cmodel, lr_scheduler, optimizer, steps_counter, num_training_steps
             )
-
             cuda_memory_tracker.track("[train] After epoch level sample trainable")
 
         # Train
@@ -432,7 +468,6 @@ def train(args, cmodel, optimizer, lr_scheduler, train_dataloader, valid_dataloa
             'valid_metrics': valid_metrics,
             'test_metrics': test_metrics,
             'baseline_runtime_metrics': baseline_runtime_metrics,
-            'factorized_runtime_metrics': factorized_runtime_metrics,
             'config': args
         }
 
@@ -571,10 +606,11 @@ def main(cfg: DictConfig):
         cuda_memory_tracker = CudaMemoryTracker()
         cuda_memory_tracker.track('[main] Initial')
 
+        # meta-llama/Llama-2-7b-chat-hf
+        import pdb; pdb.set_trace()
         model = AutoModelForCausalLM.from_pretrained(args['model']['name'])
         tokenizer = AutoTokenizer.from_pretrained(args['model']['name'])
         tokenizer.pad_token = tokenizer.eos_token
-        # train_dataloader, valid_dataloader, valid_dataset, test_dataset = get_dataloaders(args, tokenizer)
         train_dataloader, valid_dataloader, test_dataloader, test_dataset = get_dataloaders(args, tokenizer)
         logging.info("Model:\n{}".format(model))
         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
