@@ -7,6 +7,8 @@ To install requirements:
 
 ```setup
 pip install -r requirements.txt
+pip install -U datasets // update datasets library
+pip install git+https://github.com/huggingface/transformers //
 ```
 
 ## Training

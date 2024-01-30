@@ -221,8 +221,18 @@ def printmodel(model):
         print("Name: {} | Shape: {} | Requires grad: {}".format(name, param.shape, param.requires_grad))
 
 
-def train_epoch(args, model, device, train_dataloader, optimizer, lr_scheduler, epoch, print_freq=10,
-                report_latency=True, steps_counter=0, writer=None):
+def train_epoch(
+        model,
+        device,
+        train_dataloader,
+        optimizer,
+        lr_scheduler,
+        epoch,
+        print_freq=10,
+        report_latency=True,
+        steps_counter=0,
+        writer=None
+):
     loss_average_meter = AverageMeter()
     # ppl_average_meter = AverageMeter()
     latency_report = LatencyReport()
@@ -246,17 +256,6 @@ def train_epoch(args, model, device, train_dataloader, optimizer, lr_scheduler, 
 
         # Masking FactorizedNet gradients
         latency_report.start()
-        if args['fnmodel']['name'] == 'rosa' and args['fnmodel']['factorize_level'] == "batch":
-            num_training_steps = args['train']['epochs'] * len(train_dataloader)
-
-            model, optimizer, lr_scheduler = factorize(
-                args, model, lr_scheduler, optimizer, steps_counter, num_training_steps
-            )
-            cuda_memory_tracker.track("[train_epoch] After factorize")
-
-            latency_report.stop(name="factorize")
-
-            n_trainable_params = get_num_trainable_params(model)
 
         # get outputs from model, passing in labels as well for loss
         outputs = model(**batch)
@@ -347,9 +346,13 @@ def train(
         # whatever you are timing goes here
 
         # Mask gradients of RosaNet
-        if args['fnmodel']['name'] == "rosa" and args['fnmodel']['factorize_level'] == "epoch" \
-            and ((i_epoch == 0 and not args['fnmodel']['params']['factorize_method'] == 'random')
-                 or ( i_epoch > 0 and i_epoch % args['fnmodel']['factorize_freq'] == 0)):
+        # if args['fnmodel']['name'] == "rosa" and args['fnmodel']['factorize_level'] == "epoch" \
+        #     and ((i_epoch == 0 and not args['fnmodel']['params']['factorize_method'] == 'random')
+        #          or ( i_epoch > 0 and i_epoch % args['fnmodel']['factorize_freq'] == 0)):
+
+        if (args['fnmodel']['name'] == "rosa" and
+                args['fnmodel']['factorize_level'] == "epoch"
+                and (i_epoch % args['fnmodel']['factorize_freq'] == 0) and i_epoch > 0):
             num_training_steps = args['train']['epochs'] * len(train_dataloader)
             cmodel, optimizer, lr_scheduler = factorize(
                 args, cmodel, lr_scheduler, optimizer, steps_counter, num_training_steps
@@ -371,8 +374,15 @@ def train(
             _ = writer.add_scalar("train/memory_allocated", torch.cuda.memory_allocated(), i_epoch)
 
             train_metrics, optimizer, steps_counter = train_epoch(
-                args, cmodel, device, train_dataloader, optimizer, lr_scheduler, i_epoch,
-                print_freq=args["logging"]["print_freq"], writer=writer, steps_counter=steps_counter
+                model=cmodel,
+                device=device,
+                train_dataloader=train_dataloader,
+                optimizer=optimizer,
+                lr_scheduler=lr_scheduler,
+                epoch=i_epoch,
+                print_freq=args["logging"]["print_freq"],
+                writer=writer,
+                steps_counter=steps_counter
             )
         else:
             train_metrics = dict()

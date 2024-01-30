@@ -22,7 +22,7 @@ fnmodel:
   name: none # [rosa, lora, none]
   ignore_list: True # use predefined `ignore_list` consisting pf 'mlp'
   factorize_freq: 1  # factorize every n epochs
-  factorize_level: epoch  # ["epoch", "batch"]
+  factorize_level: epoch  # ["epoch", "batch", "none"]
   params:
     rank: 0.01  # rank of trainable parameters [float in (0,1) or int]
     level: epoch  # ["epoch", "batch"]

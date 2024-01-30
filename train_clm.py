@@ -31,13 +31,6 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.width', 2000)
 pd.set_option('display.float_format', '{:.3f}'.format)
 
-# todo: model(**batch) to include attn mask [done]
-# todo: divide by rank in model [done]
-# todo: add ia3 model [done]
-# todo: add NIST score
-# todo: add in_out for ia3
-# todo: change model api to do a `factorize` if train mode and a `merge` if evaltools mode
-
 
 def get_dataloaders(args, tokenizer):
     # Load dataset
@@ -155,6 +148,7 @@ def evaluate(model, device, eval_dataloader):
             "bpc": loss_average_meter.value / math.log(2)
             }
 
+
 def factorize(args, model, lr_scheduler, optimizer, steps_counter, num_training_steps):
     # Mask gradients
     with torch.no_grad():
@@ -207,6 +201,7 @@ def get_num_trainable_params(model):
         n_trainable_params += param.numel() if param.requires_grad else 0
     return n_trainable_params
 
+
 def train_epoch(
         args,
         model,
@@ -243,6 +238,7 @@ def train_epoch(
     for i_step, batch in enumerate(train_dataloader):
 
         step = epoch * len(train_dataloader) + i_step
+        # import pdb; pdb.set_trace()
 
         if args['logging']['eval_level'] == "batch" and i_step % args['logging']['eval_freq'] == 0:
 
@@ -289,7 +285,9 @@ def train_epoch(
 
         # Masking FactorizedNet gradients
         latency_report.start()
-        if args['fnmodel']['name'] == 'rosa' and args['fnmodel']['params']['level'] == "batch":
+        # if args['fnmodel']['name'] == 'rosa' and args['fnmodel']['params']['level'] == "batch":
+        #     num_training_steps = args['train']['epochs'] * len(train_dataloader)
+        if args['fnmodel']['params']['level'] == "batch":
             num_training_steps = args['train']['epochs'] * len(train_dataloader)
 
             model, optimizer, lr_scheduler = factorize(
@@ -302,7 +300,6 @@ def train_epoch(
             n_trainable_params = get_num_trainable_params(model)
 
         # Forward pass
-        # import pdb; pdb.set_trace()
         outputs = model(**batch)
         cuda_memory_tracker.track("[train_epoch] After forward")
         latency_report.stop(name="forward")
@@ -321,9 +318,34 @@ def train_epoch(
             cuda_memory_tracker.track("[train_epoch] After loss.backward()")
             latency_report.stop(name="loss.backward()")
 
+            # # Loop through and log gradient norms (for debugging)
+            # for name, param in model.named_parameters():
+            #     if param.requires_grad:
+            #         logging.info("=> {} | grad norm: {:.2f}".format(name, param.grad.norm().item()))
+
+            # Mean of gradient norms
+            param_norm = torch.stack([param.norm() for param in model.parameters()]).mean()
+            grad_norm = torch.stack([param.grad.norm() for param in model.parameters()]).mean()
+            logging.info("=> grad norm (mean): {:.2f}".format(grad_norm.item()))
+            logging.info("=> param norm (mean) (before step): {:.2f}".format(param_norm.item()))
+
+            # Gradient clipping
+            max_grad_norm = 0.1  # or any number that you choose
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+            cuda_memory_tracker.track("[train_epoch] After gradient clipping")
+
             optimizer.step()
             cuda_memory_tracker.track("[train_epoch] After optimizer.step()")
             latency_report.stop(name="optimizer.step()")
+
+
+            # Mean of gradient norms
+            param_norm = torch.stack([param.norm() for param in model.parameters()]).mean()
+            logging.info("=> param norm (mean) (after step): {:.2f}".format(param_norm.item()))
+
+            # optimizer.step()
+            # cuda_memory_tracker.track("[train_epoch] After optimizer.step()")
+            # latency_report.stop(name="optimizer.step()")
 
         if lr_scheduler is not None:
             lr_scheduler.step()
@@ -395,12 +417,13 @@ def train(
 
         epoch_start_time = time.time()
 
-        factorize_flag = False
-        if args['fnmodel']['name'] == "rosa":
-            if  i_epoch > 0 and i_epoch % args['fnmodel']['factorize_freq'] == 0:
-                factorize_flag = True
+        # factorize_flag = False
+        # if args['fnmodel']['name'] == "rosa":
+        #     if i_epoch > 0 and i_epoch % args['fnmodel']['factorize_freq'] == 0:
+        #         factorize_flag = True
 
-        if factorize_flag:
+        if (args['fnmodel']['factorize_level'] == "epoch"
+                and (i_epoch % args['fnmodel']['factorize_freq'] == 0) and i_epoch > 0):
             num_training_steps = args['train']['epochs'] * len(train_dataloader)
             cmodel, optimizer, lr_scheduler = factorize(
                 args, cmodel, lr_scheduler, optimizer, steps_counter, num_training_steps
@@ -408,17 +431,13 @@ def train(
             cuda_memory_tracker.track("[train] After epoch level sample trainable")
 
         # Train
-        if i_epoch > 0:
-            cuda_memory_tracker.track("[train] Before train epoch")
-            _ = writer.add_scalar("train/memory_allocated", torch.cuda.memory_allocated(), i_epoch)
-            train_metrics, optimizer = train_epoch(
-                args, cmodel, device, train_dataloader, optimizer, lr_scheduler, i_epoch,
-                print_freq=args["logging"]["print_freq"], writer=writer
-            )
-            train_end_time = time.time()
-        else:
-            train_metrics = None
-            train_end_time = epoch_start_time
+        cuda_memory_tracker.track("[train] Before train epoch")
+        _ = writer.add_scalar("train/memory_allocated", torch.cuda.memory_allocated(), i_epoch)
+        train_metrics, optimizer = train_epoch(
+            args, cmodel, device, train_dataloader, optimizer, lr_scheduler, i_epoch,
+            print_freq=args["logging"]["print_freq"], writer=writer
+        )
+        train_end_time = time.time()
 
         cuda_memory_tracker.track("[train] After train epoch")
         _ = writer.add_scalar("train/memory_allocated", torch.cuda.memory_allocated(), i_epoch)
@@ -545,23 +564,23 @@ def train(
 
 @hydra.main(version_base=None, config_path="./configs", config_name="conf_clm")
 def main(cfg: DictConfig):
+
     # Experiment tracking and logging
     args = OmegaConf.to_container(cfg, resolve=True)
     print(OmegaConf.to_yaml(cfg))
 
     for t in range(max(1, args["runs"])):
-
         # Set diff seeds for each run
         if args['seed'] > 0:
             set_seeds(int(args['seed'] + t))
 
-        exp_name = get_experiment_name(
-            {"train": args["train"], "model": args["model"], "fnmodel": args["fnmodel"], "trial": t}
+        folder_name = get_experiment_name(
+            {"train": args["train"], "model": args["model"], "fnmodel": args["fnmodel"], "trial": t},
+            mode='str'
         )
-        folder_name = "_".join(["{}{}".format(k, v) for k, v in exp_name.items()])
 
+        # Get checkpoints if they exist
         dct_latest, dct_best = None, None
-
         output_path = osp.join(args['output']['path'], args['dataset']['name'], folder_name)
         if not osp.exists(output_path):
             os.makedirs(output_path)
@@ -594,7 +613,7 @@ def main(cfg: DictConfig):
         )
         logging.getLogger().addHandler(logging.FileHandler(osp.join(output_path, "logging.txt")))
 
-        run = wandb.init(
+        wandb.init(
             mode="disabled",
             # Set the project where this run will be logged
             project="rosa",
@@ -606,29 +625,20 @@ def main(cfg: DictConfig):
         cuda_memory_tracker = CudaMemoryTracker()
         cuda_memory_tracker.track('[main] Initial')
 
+        # Get model
         # meta-llama/Llama-2-7b-chat-hf
-        import pdb; pdb.set_trace()
-        model = AutoModelForCausalLM.from_pretrained(args['model']['name'])
-        tokenizer = AutoTokenizer.from_pretrained(args['model']['name'])
+        # import pdb; pdb.set_trace()
+        model = AutoModelForCausalLM.from_pretrained(args['model']['name'], torch_dtype=torch.float16)
+        tokenizer = AutoTokenizer.from_pretrained(args['model']['name'], torch_dtype=torch.float16)
         tokenizer.pad_token = tokenizer.eos_token
         train_dataloader, valid_dataloader, test_dataloader, test_dataset = get_dataloaders(args, tokenizer)
         logging.info("Model:\n{}".format(model))
         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         cuda_memory_tracker.track('[main] Created base model loaded to cpu')
 
-        logging.info("=> Computing baseline latency...")
         model.to(device)
         torch.cuda.empty_cache()
         cuda_memory_tracker.track('[main] Moved baseline model loaded to gpu')
-
-        baseline_mean, baseline_std = get_latency(
-            model, device=device, inp=torch.ones(args['logging']['input_size'], dtype=torch.long)
-        ) if not args['debug'] else (1, 1)
-        baseline_params = get_num_params(model)
-
-        baseline_runtime_metrics = {
-            "mean": baseline_mean, "std": baseline_std, "params": baseline_params
-        }
 
         # Factorize model either using ROSA or LORA
         logging.info("=> Using {} model ...".format(args['fnmodel']['name'].lower()))
@@ -705,17 +715,6 @@ def main(cfg: DictConfig):
             **args['train']['scheduler']['params']
         ) if args['train']['scheduler']['name'] != "none" else None
 
-        # Compute tn model latency
-        logging.info("=> Computing factorized latency...")
-        factorized_mean, factorized_std = get_latency(
-            cmodel, device=device, inp=torch.ones(args['logging']['input_size'], dtype=torch.long)
-        ) if not args['debug'] else (1, 1)
-        factorized_params = get_num_params(cmodel)
-
-        logging.info("=> Baseline {:.4f} ms| Factorized {:.4f} ms | Speedup {:.4f} | Compression {:.4f}".format(
-            baseline_mean, factorized_mean, baseline_mean / factorized_mean, factorized_params / baseline_params
-        ))
-
         # Parallelize the model
         if torch.cuda.device_count() >= 1:
             logging.info("=> Using {} GPU(s)".format(torch.cuda.device_count()))
@@ -724,10 +723,21 @@ def main(cfg: DictConfig):
         # Training
         logging.info(cuda_memory_tracker.report())
         train(
-            args, cmodel, optimizer, lr_scheduler, train_dataloader, valid_dataloader, device,
-            output_path, tokenizer, writer, curr_epoch=curr_epoch, best_valid_metrics=curr_best_valid_metrics,
-            baseline_runtime_metrics=baseline_runtime_metrics, cuda_memory_tracker=cuda_memory_tracker,
-            test_dataloader=test_dataloader, test_dataset=test_dataset
+            args=args,
+            cmodel=cmodel,
+            optimizer=optimizer,
+            lr_scheduler=lr_scheduler,
+            train_dataloader=train_dataloader,
+            valid_dataloader=valid_dataloader,
+            device=device,
+            output_path=output_path,
+            tokenizer=tokenizer,
+            writer=writer,
+            curr_epoch=curr_epoch,
+            best_valid_metrics=curr_best_valid_metrics,
+            cuda_memory_tracker=cuda_memory_tracker,
+            test_dataloader=test_dataloader,
+            test_dataset=test_dataset
         )
 
         print("=> Experiment: `{}` Succeeded".format(folder_name))
