@@ -343,13 +343,6 @@ def train(
         end = torch.cuda.Event(enable_timing=True)
 
         start.record()
-        # whatever you are timing goes here
-
-        # Mask gradients of RosaNet
-        # if args['fnmodel']['name'] == "rosa" and args['fnmodel']['factorize_level'] == "epoch" \
-        #     and ((i_epoch == 0 and not args['fnmodel']['params']['factorize_method'] == 'random')
-        #          or ( i_epoch > 0 and i_epoch % args['fnmodel']['factorize_freq'] == 0)):
-
         if (args['fnmodel']['name'] == "rosa" and
                 args['fnmodel']['factorize_level'] == "epoch"
                 and (i_epoch % args['fnmodel']['factorize_freq'] == 0) and i_epoch > 0):
@@ -437,7 +430,6 @@ def train(
         }
 
         # Save model checkpoint
-
         # set `metric_key` depending on the glue task
         # cola uses `matthews_correlation`
         # stsb uses `spearmanr`
@@ -537,10 +529,8 @@ def main(cfg: DictConfig):
         writer = SummaryWriter(log_dir=output_path)
         run = wandb.init(
             mode="disabled",
-            # Set the project where this run will be logged
             project="rosa-mlm",
             name=folder_name,
-            # Track hyperparameters and run metadata
             config=args,
         )
 
@@ -666,9 +656,6 @@ def main(cfg: DictConfig):
 
         # Scheduler
         n_training_steps = args['train']['epochs'] * len(train_dataloader)
-        # calculate the number of warmup steps
-        # based on args['train']['scheduler']['warmup_ratio'] of the
-        # total number of training steps
         n_warmup_steps = math.ceil(n_training_steps * args['train']['scheduler']['warmup_ratio'])
         lr_scheduler = get_scheduler(
             name=args['train']['scheduler']['name'],

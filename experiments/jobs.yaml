@@ -628,7 +628,6 @@ groups:
       - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=42 +profile=marawan +task=stsb train.batch_size=32 fnmodel.factorize_level=epoch fnmodel.factorize_freq=4 fnmodel.name=rosa fnmodel.params.rank=8 fnmodel.params.factorize_method=svd_equal train.lr=2e-5
 
 #      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface +profile=marawan seed=42 +task=stsb train.epochs=10 train.batch_size=32 fnmodel.name=none train.lr=2e-5
-
 #      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=84 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=8 fnmodel.params.factorize_method=random_proj train.lr=2e-5
 #      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=84 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=8 fnmodel.params.factorize_method=random_proj_orthogonal train.lr=2e-3
 #      - python train_mlm.py dataset.cache=$SLURM_TMPDIR/huggingface seed=168 +profile=marawan +task=cola train.batch_size=16 fnmodel.name=rosa fnmodel.params.rank=8 fnmodel.params.factorize_method=random_proj train.lr=2e-5
